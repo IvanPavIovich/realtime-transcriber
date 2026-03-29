@@ -36,28 +36,42 @@ class GigaAMTranscriber(AbstractTranscriber):
         if self._model is None:
             self.load()
 
-        import torch
+        import tempfile
+        import soundfile as sf
 
-        # GigaAM expects 16kHz mono float32 tensor
-        tensor = torch.from_numpy(audio).float().unsqueeze(0)
-        if self.device == "cuda":
-            tensor = tensor.cuda()
+        # GigaAM expects a file path — save to temp wav
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp_path = f.name
+            sf.write(tmp_path, audio, sr)
 
-        with torch.no_grad():
-            recognition = self._model.transcribe(tensor)
+        try:
+            recognition = self._model.transcribe(tmp_path)
+        finally:
+            import os
+            os.unlink(tmp_path)
 
         results = []
-        for item in recognition:
-            text = item.text.strip() if hasattr(item, "text") else str(item).strip()
+        if isinstance(recognition, str):
+            text = recognition.strip()
             if text:
-                start = getattr(item, "start", 0.0)
-                end = getattr(item, "end", len(audio) / sr)
                 results.append(TranscriptionResult(
                     text=text,
-                    start=start,
-                    end=end,
+                    start=0.0,
+                    end=len(audio) / sr,
                     language="ru",
                 ))
+        else:
+            for item in recognition:
+                text = item.text.strip() if hasattr(item, "text") else str(item).strip()
+                if text:
+                    start = getattr(item, "start", 0.0)
+                    end = getattr(item, "end", len(audio) / sr)
+                    results.append(TranscriptionResult(
+                        text=text,
+                        start=start,
+                        end=end,
+                        language="ru",
+                    ))
         return results
 
     def unload(self) -> None:
