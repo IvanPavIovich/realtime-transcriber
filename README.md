@@ -37,6 +37,9 @@ pip install pyannote.audio
 
 ### Запуск
 
+Двойной клик по `run.bat` — запустится с конфигом по умолчанию.
+
+Или из консоли:
 ```bash
 # Микрофон, CPU, tiny модель (быстрый тест)
 python main.py -c config-dev.yaml
