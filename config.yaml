@@ -1,0 +1,36 @@
+audio:
+  device_name: "CABLE Output"   # null = auto-detect
+  mode: "loopback"              # mic | loopback
+  sample_rate: 16000
+  chunk_ms: 250
+
+vad:
+  threshold: 0.5
+  min_speech_ms: 250
+  min_silence_ms: 500
+  max_segment_sec: 30.0
+  padding_ms: 200
+
+transcriber:
+  engine: "whisper"              # whisper | gigaam
+  whisper:
+    model_size: "large-v3"       # tiny | base | small | medium | large-v3
+    compute_type: "float16"      # float16 (GPU) | int8 (CPU)
+    language: "ru"
+    beam_size: 5
+  gigaam:
+    model_type: "ctc"            # ctc | rnnt | e2e_ctc | e2e_rnnt
+
+diarizer:
+  enabled: true
+  engine: "pyannote"             # pyannote | diart
+  pyannote:
+    min_speakers: 1
+    max_speakers: 6
+
+device: "auto"                   # auto | cpu | cuda
+
+output:
+  format: "jsonl"                # json | jsonl
+  file: null                     # null = stdout
+  realtime_print: true

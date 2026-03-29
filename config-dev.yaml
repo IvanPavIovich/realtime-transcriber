@@ -1,0 +1,31 @@
+# Dev/test config — CPU, tiny models
+audio:
+  device_name: null          # null = auto-detect
+  mode: "mic"                # mic | loopback
+  sample_rate: 16000
+  chunk_ms: 250
+
+vad:
+  threshold: 0.15             # low for mic — catch more speech
+  min_speech_ms: 150
+  min_silence_ms: 800          # wait longer before cutting segment
+  max_segment_sec: 30.0
+  padding_ms: 300
+
+transcriber:
+  engine: "whisper"
+  whisper:
+    model_size: "tiny"
+    compute_type: "int8"
+    language: "ru"
+    beam_size: 1
+
+diarizer:
+  enabled: false
+
+device: "cpu"
+
+output:
+  format: "jsonl"
+  file: null
+  realtime_print: true
