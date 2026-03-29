@@ -1,14 +1,22 @@
-"""Audio capture from WASAPI loopback or microphone via pyaudiowpatch."""
+"""Audio capture from WASAPI loopback (Windows) or ALSA/PulseAudio microphone (Linux)."""
 
 from __future__ import annotations
 
 import logging
+import platform
 import queue
 import threading
 
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+IS_WINDOWS = platform.system() == "Windows"
+
+try:
+    import pyaudiowpatch as _pyaudio_mod
+except ImportError:
+    import pyaudio as _pyaudio_mod
 
 
 class AudioCapture:
@@ -27,12 +35,17 @@ class AudioCapture:
         self._stop = threading.Event()
 
     def _find_device(self):
-        """Find WASAPI device by name or auto-detect."""
-        import pyaudiowpatch as pyaudio
+        """Find audio device by name or auto-detect."""
+        self._pyaudio = _pyaudio_mod.PyAudio()
 
-        self._pyaudio = pyaudio.PyAudio()
-        wasapi_info = self._pyaudio.get_host_api_info_by_type(pyaudio.paWASAPI)
+        if IS_WINDOWS:
+            return self._find_device_wasapi()
+        else:
+            return self._find_device_linux()
 
+    def _find_device_wasapi(self):
+        """Find WASAPI device (Windows)."""
+        wasapi_info = self._pyaudio.get_host_api_info_by_type(_pyaudio_mod.paWASAPI)
         is_loopback = self.mode == "loopback"
 
         target = None
@@ -44,7 +57,6 @@ class AudioCapture:
                 if not dev.get("isLoopbackDevice", False):
                     continue
             else:
-                # Mic mode: input devices that are NOT loopback
                 if dev.get("isLoopbackDevice", False):
                     continue
                 if dev.get("maxInputChannels", 0) < 1:
@@ -74,12 +86,41 @@ class AudioCapture:
             )
         return target
 
+    def _find_device_linux(self):
+        """Find input device on Linux (ALSA/PulseAudio)."""
+        if self.mode == "loopback":
+            log.warning("Loopback not supported on Linux, falling back to mic mode")
+
+        target = None
+        available = []
+        for i in range(self._pyaudio.get_device_count()):
+            dev = self._pyaudio.get_device_info_by_index(i)
+            if dev.get("maxInputChannels", 0) < 1:
+                continue
+            available.append(dev["name"])
+            if self.device_name is not None:
+                if self.device_name.lower() in dev["name"].lower():
+                    target = dev
+                    break
+            else:
+                # Prefer USB/external mic over built-in
+                if target is None:
+                    target = dev
+                if "usb" in dev["name"].lower():
+                    target = dev
+                    break
+
+        if target is None:
+            raise RuntimeError(
+                f"Microphone not found: {self.device_name!r}. "
+                f"Available: {available}"
+            )
+        return target
+
     def _callback(self, in_data, frame_count, time_info, status):
         """PyAudio stream callback — pushes chunks to queue."""
-        import pyaudiowpatch as pyaudio
-
         if self._stop.is_set():
-            return (None, pyaudio.paComplete)
+            return (None, _pyaudio_mod.paComplete)
 
         audio = np.frombuffer(in_data, dtype=np.float32).copy()
         # Mix to mono if stereo
@@ -93,12 +134,10 @@ class AudioCapture:
             self.queue.get_nowait()  # drop oldest
             self.queue.put_nowait(audio)
 
-        return (None, pyaudio.paContinue)
+        return (None, _pyaudio_mod.paContinue)
 
     def start(self) -> None:
         """Open audio stream and begin capturing."""
-        import pyaudiowpatch as pyaudio
-
         device = self._find_device()
         native_rate = int(device["defaultSampleRate"])
         self.native_rate = native_rate
@@ -110,7 +149,7 @@ class AudioCapture:
         )
 
         self._stream = self._pyaudio.open(
-            format=pyaudio.paFloat32,
+            format=_pyaudio_mod.paFloat32,
             channels=channels,
             rate=native_rate,
             input=True,
