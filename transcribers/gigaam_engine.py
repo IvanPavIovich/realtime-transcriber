@@ -51,27 +51,26 @@ class GigaAMTranscriber(AbstractTranscriber):
             os.unlink(tmp_path)
 
         results = []
+        # GigaAM returns: str, TranscriptionResult, or list
         if isinstance(recognition, str):
             text = recognition.strip()
-            if text:
-                results.append(TranscriptionResult(
-                    text=text,
-                    start=0.0,
-                    end=len(audio) / sr,
-                    language="ru",
-                ))
+        elif hasattr(recognition, "text"):
+            text = recognition.text.strip()
+        elif isinstance(recognition, (list, tuple)):
+            text = " ".join(
+                item.text.strip() if hasattr(item, "text") else str(item).strip()
+                for item in recognition
+            ).strip()
         else:
-            for item in recognition:
-                text = item.text.strip() if hasattr(item, "text") else str(item).strip()
-                if text:
-                    start = getattr(item, "start", 0.0)
-                    end = getattr(item, "end", len(audio) / sr)
-                    results.append(TranscriptionResult(
-                        text=text,
-                        start=start,
-                        end=end,
-                        language="ru",
-                    ))
+            text = str(recognition).strip()
+
+        if text:
+            results.append(TranscriptionResult(
+                text=text,
+                start=0.0,
+                end=len(audio) / sr,
+                language="ru",
+            ))
         return results
 
     def unload(self) -> None:
